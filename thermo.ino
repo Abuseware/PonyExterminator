@@ -56,16 +56,14 @@ void loop() {
 
     sensors.requestTemperatures();
 
-    String buf = String(now.day(), DEC) + "." + String(now.month(), DEC) + "." + String(now.year(), DEC) + ";" + \
-                 String(now.hour(), DEC) + ":" + String(now.minute(), DEC) + ";" + \
-                 String(sensors.getTempCByIndex(0), 4);
+    String buf = String(now.unixtime(), DEC) + ";" + String(sensors.getTempCByIndex(0), 4);
 
     File dataFile = SD.open("temp.csv", FILE_WRITE);
     if(dataFile) {
       if(dataFile.position() == 0) {
         Serial.println(F("New file, writing header."));
-        Serial.println(F("Date;Time;Degrees"));
-        dataFile.println(F("Date;Time;Degrees"));
+        Serial.println(F("Timestamp;Degrees"));
+        dataFile.println(F("Timestamp;Degrees"));
       }
       dataFile.println(buf);
       dataFile.close();
