@@ -13,24 +13,28 @@ import datetime
 yaxis_label = '\u2103'
 xaxis_format = md.DateFormatter('%d.%m.%Y %H:%M')
 length_divider = 60
+interpolation_multiplier = 10
 
 
 #Load data from file
-data = numpy.loadtxt('temp.csv', delimiter = ';', dtype = {'names': ['date', 'time', 'degrees'], 'formats': ['U16', 'U16', 'f']} , skiprows = 1)
+data = numpy.loadtxt('temp.csv', delimiter = ';', dtype = {'names': ['timestamp', 'degrees'], 'formats': ['int32', 'f']} , skiprows = 1)
 
 #Parse data into arrays
-timestamps = numpy.array([datetime.datetime.strptime(x[0] + " " + x[1], '%d.%m.%Y %H:%M').timestamp() for x in data])
-degrees = numpy.array([float(x[2]) for x in data])
+timestamps = numpy.array([float(x[0]) for x in data])
+degrees = numpy.array([float(x[1]) for x in data])
 
 #Interpolate
-xnew = numpy.linspace(timestamps.min(), timestamps.max(), 1000)
+samples = len(timestamps) * interpolation_multiplier
+print("Interpolating {} samples to {} samples".format(len(timestamps), samples))
+xnew = numpy.linspace(timestamps.min(), timestamps.max(), samples)
 ynew = interp.spline(timestamps, degrees, xnew)
 
 #Render plot
-plt.figure(figsize=(len(data)/length_divider, 7))
+print("Output width: {}in".format(len(data)/length_divider))
+plt.figure(figsize=(len(data)/length_divider, 8))
 
 plt.plot([datetime.datetime.fromtimestamp(x) for x in xnew], ynew)
-plt.plot([datetime.datetime.fromtimestamp(x) for x in timestamps], degrees, linestyle='none', marker='.', markersize=0.5)
+#plt.plot([datetime.datetime.fromtimestamp(x) for x in timestamps], degrees, linestyle='none', marker='o', markersize=0.5)
 
 plt.ylabel(yaxis_label)
 
