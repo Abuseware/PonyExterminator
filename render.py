@@ -12,8 +12,7 @@ import datetime
 #Configuration variables
 yaxis_label = '\u2103'
 xaxis_format = md.DateFormatter('%d.%m.%Y %H:%M')
-length_divider = 2*3
-
+length_divider = 60
 
 
 #Load data from file
@@ -31,7 +30,7 @@ ynew = interp.spline(timestamps, degrees, xnew)
 plt.figure(figsize=(len(data)/length_divider, 7))
 
 plt.plot([datetime.datetime.fromtimestamp(x) for x in xnew], ynew)
-plt.plot([datetime.datetime.fromtimestamp(x) for x in timestamps], degrees, linestyle='none', marker='.', markersize=6)
+plt.plot([datetime.datetime.fromtimestamp(x) for x in timestamps], degrees, linestyle='none', marker='.', markersize=0.5)
 
 plt.ylabel(yaxis_label)
 
