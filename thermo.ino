@@ -17,7 +17,7 @@ DallasTemperature sensors(&oneWire);
 
 RTC_DS1307 RTC;
 
-uint8_t lastCheck = 60;
+uint8_t lastCheck;
 
 void setup() {
   while(!Serial);
@@ -46,13 +46,13 @@ void setup() {
   sensors.begin();
   sensors.setResolution(SENSOR_RES);
 
-  lastCheck = RTC.now().minute();
+  lastCheck = RTC.now().unixtime();
 }
 
 void loop() {
   DateTime now = RTC.now();
-  if(lastCheck != now.minute()) {
-    lastCheck = now.minute();
+  if(now.unixtime() - lastCheck > 59) {
+    lastCheck = now.unixtime();
 
     sensors.requestTemperatures();
 
