@@ -10,58 +10,58 @@ import datetime
 import time
 
 try:
-	import matplotlib.pyplot as plt
-	import matplotlib.dates as md
-except (ImportError, ModuleNotFoundError):
-	print("Matplotlib not found, please install required libraries")
-	exit(1)
+    import matplotlib.pyplot as plt
+    import matplotlib.dates as md
+except ImportError:
+    print("Matplotlib not found, please install required libraries")
+    exit(1)
 
-#Configuration variables
+# Configuration variables
 yaxis_label = '\u2103'
 xaxis_format = md.DateFormatter('%d.%m.%Y %H:%M')
 
-#Parse command line arguments
-parser = argparse.ArgumentParser(description = 'Render thermometer data into plot.')
-parser.add_argument('file', type = argparse.FileType(), help = 'source file')
-parser.add_argument('--format', choices = ['svg', 'png'], default = 'svg', help = 'destination image format')
-parser.add_argument('--markers', action = 'store_true', help = 'draw markers on samples')
-parser.add_argument('--days', type = int, default = 0, help = 'render data from last DAYS')
-parser.add_argument('--hours', type = int, default = 0, help = 'render data from last HOURS')
-parser.add_argument('--minutes', type = int, default = 0, help = 'render data from last MINUTES')
-parser.add_argument('--seconds', type = int, default = 0, help = 'render data from last SECONDS')
+# Parse command line arguments
+parser = argparse.ArgumentParser(description='Render thermometer data into plot.')
+parser.add_argument('file', type=argparse.FileType(), help='source file')
+parser.add_argument('--format', choices=['svg', 'png'], default='svg', help='destination image format')
+parser.add_argument('--markers', action='store_true', help='draw markers on samples')
+parser.add_argument('--days', type=int, default=0, help='render data from last DAYS')
+parser.add_argument('--hours', type=int, default=0, help='render data from last HOURS')
+parser.add_argument('--minutes', type=int, default=0, help='render data from last MINUTES')
+parser.add_argument('--seconds', type=int, default=0, help='render data from last SECONDS')
 
 args = parser.parse_args(sys.argv[1:])
 
-#Calculate delta timestamp
+# Calculate delta timestamp
 time_delta = (args.days * 24 * 60 * 60) + (args.hours * 60 * 60) + (args.minutes * 60) + args.seconds
 time_after = int(time.time()) - time_delta if time_delta else 0
 
-#Load data from file
+# Load data from file
 timestamps = array.array('i')
 degrees = array.array('d')
 try:
-	args.file.readline() #Skip header
-	for row in csv.reader(args.file, delimiter = ';'):
-		if int(row[0]) > time_after:
-			timestamps.append(int(row[0]))
-			degrees.append(float(row[1]))
+    args.file.readline()  # Skip header
+    for row in csv.reader(args.file, delimiter=';'):
+        if int(row[0]) > time_after:
+            timestamps.append(int(row[0]))
+            degrees.append(float(row[1]))
 except ValueError:
-	print("File malformed - value has wrong data type, exiting.")
-	exit(1)
+    print("File malformed - value has wrong data type, exiting.")
+    exit(1)
 except IndexError:
-	print("File malformed - wrong number of columns, exiting.")
-	exit(1)
+    print("File malformed - wrong number of columns, exiting.")
+    exit(1)
 
 if not len(timestamps):
-	print("No data available in specified time range, or file is empty.")
-	exit(1)
+    print("No data available in specified time range, or file is empty.")
+    exit(1)
 
-#Render plot
+# Render plot
 plt.figure(figsize=(14, 8))
 
 plt.plot([datetime.datetime.fromtimestamp(x) for x in timestamps], degrees)
 if args.markers:
-	plt.plot([datetime.datetime.fromtimestamp(x) for x in timestamps], degrees, linestyle='none', marker='o', markersize=3)
+    plt.plot([datetime.datetime.fromtimestamp(x) for x in timestamps], degrees, linestyle='none', marker='o', markersize=3)
 
 plt.ylabel(yaxis_label)
 
@@ -69,12 +69,12 @@ plt.gca().xaxis.set_major_formatter(xaxis_format)
 plt.xticks(fontsize=8, rotation=10)
 plt.grid(linestyle='dashed')
 
-#Save plot to file
+# Save plot to file
 try:
-	plt.savefig(args.file.name.rsplit('.')[0] + '.' + args.format, dpi='figure')
+    plt.savefig(args.file.name.rsplit('.')[0] + '.' + args.format, dpi='figure')
 except PermissionError:
-	print("Cannot write to file, exiting.")
-	exit(1)
+    print("Cannot write to file, exiting.")
+    exit(1)
 except Exception:
-	print("Unexpected error: " + sys.exc_info()[0])
-	raise
+    print("Unexpected error: " + sys.exc_info()[0])
+    raise
