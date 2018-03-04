@@ -37,6 +37,7 @@ args = parser.parse_args(sys.argv[1:])
 # Calculate delta timestamp
 time_delta = (args.days * 24 * 60 * 60) + (args.hours * 60 * 60) + (args.minutes * 60) + args.seconds
 time_after = int(time.time()) - time_delta if time_delta else 0
+time_offset = time.localtime().tm_gmtoff
 
 # Load data from file
 timestamps = array.array('i')
@@ -44,8 +45,9 @@ degrees = array.array('d')
 try:
     args.file.readline()  # Skip header
     for row in csv.reader(args.file, delimiter=';'):
-        if int(row[0]) > time_after:
-            timestamps.append(int(row[0]))
+        utctime = int(row[0]) - time_offset
+        if int(utctime) >= time_after:
+            timestamps.append(utctime)
             degrees.append(float(row[1]))
 except ValueError:
     print("File malformed - value has wrong data type, exiting.")
