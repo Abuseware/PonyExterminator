@@ -12,12 +12,12 @@
 
 #define SENSOR_RES 12
 
+#define CHECK_INTERVAL 5
+
 OneWire oneWire(ONEWIRE_PIN);
 DallasTemperature sensors(&oneWire);
 
 RTC_DS1307 RTC;
-
-uint8_t lastCheck;
 
 void setup() {
   while(!Serial);
@@ -45,14 +45,11 @@ void setup() {
 
   sensors.begin();
   sensors.setResolution(SENSOR_RES);
-
-  lastCheck = RTC.now().unixtime();
 }
 
 void loop() {
   DateTime now = RTC.now();
-  if(now.unixtime() - lastCheck > 59) {
-    lastCheck = now.unixtime();
+  if(now.unixtime() % (CHECK_INTERVAL * 60) == 0) {
 
     sensors.requestTemperatures();
 
@@ -73,5 +70,5 @@ void loop() {
     }
   }
 
-  delay(5000);
+  delay(500);
 }
