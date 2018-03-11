@@ -41,7 +41,7 @@ time_offset = time.localtime().tm_gmtoff
 
 # Load data from file
 timestamps = array.array('i')
-degrees = array.array('d')
+degrees = array.array('f')
 try:
     args.file.readline()  # Skip header
     for row in csv.reader(args.file, delimiter=';'):
