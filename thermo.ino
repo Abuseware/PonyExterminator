@@ -1,131 +1,146 @@
+/* Digital thermometer by Artur "Licho" Kaleta
+ *
+ * Few things first:
+ * You can use DS18B20 or MCP9700A and select proper device by providing LOW or HIGH on SELECTOR_PIN
+ * MCP9700A version is cheaper, faster and works on lower voltages which is good for battery powered devices, but with lower precision in readings
+ * DS18B20 requires AT LEAST 3V to work, also is very slow, especially with precision bumped to 12bits
+ */
+ 
+#include <RF24Network.h>
+#include <RF24.h>
+#include <SPI.h>
+
 #include <OneWire.h>
 #include <DallasTemperature.h>
 
-#include <LiquidCrystal.h>
+#include <Adafruit_SleepyDog.h>
 
-#include <SPI.h>
-#include <SD.h>
+#include "config.h"
+#if MCP_SAMPLES > 255 || MCP_SAMPLES < 1
+  #error MCP_SAMPLES is out of range (1-255)
+#endif
 
-#define ONEWIRE_PIN 8
-
-#define SD_CS_PIN 10
-
-#define LCD_RS 7
-#define LCD_E 6
-#define LCD_D4 5
-#define LCD_D5 4
-#define LCD_D6 3
-#define LCD_D7 2
-
-#define SENSOR_RES 12
-
-#define CHECK_INTERVAL 5
+RF24 radio(7,8);
+RF24Network network(radio);
 
 OneWire oneWire(ONEWIRE_PIN);
 DallasTemperature sensors(&oneWire);
-DeviceAddress sensorAddress[10];
-uint8_t sensorCount = 0;
-float sensorRead[10];
-String fileName = "temp.csv";
 
-LiquidCrystal LCD(LCD_RS, LCD_E, LCD_D4, LCD_D5, LCD_D6, LCD_D7);
+uint8_t mode;
+
+int compareInt(const void* a, const void* b) {
+  return (*(int*)a - *(int*)b);
+}
+
+float getTemperature() {
+  float temp;
+
+  //MCP9700A
+  if(mode) {
+    /*
+     * Calculations:
+     * Multiply ADC value by ADC reference voltage
+     * Divide by available steps (1024 for 10bit)
+     * Substract 0.5V which is 0C point
+     * Divide by 0.01V (10mV per step)
+     */
+
+    #if MCP_SAMPLES > 1
+      int results[MCP_SAMPLES];
+      for(uint8_t i = 0; i < MCP_SAMPLES; i++) {
+        results[i] = analogRead(MCP_PIN);
+        //delay(5);
+      }
+      qsort(results, MCP_SAMPLES, sizeof(int), compareInt);
+      temp = (((results[(MCP_SAMPLES / 2) - 1] * 1.1L) / 1024.0L) - 0.5L) / 0.01L;
+    #else
+      temp = (((analogRead(MCP_PIN) * 1.1L) / 1024.0L) - 0.5L) / 0.01L;
+    #endif
+    temp += MCP_CALIBRATION; //Calibration value
+
+  //DS18B20
+  } else {
+    sensors.requestTemperatures();
+    temp = sensors.getTempCByIndex(0);
+  }
+
+  return temp;
+}
+
+float getVoltage() {
+  int results[VCC_SAMPLES];
+  for(uint8_t i = 0; i < VCC_SAMPLES; i++) {
+    results[i] = analogRead(VCC_PIN);
+  }
+  qsort(results, VCC_SAMPLES, sizeof(int), compareInt);
+  return ((float)results[(VCC_SAMPLES / 2) - 1] / 1023L) * 4.3L;
+}
+
+int getCharge() {
+  return  100 * ((getVoltage() - VCC_LOW) / (VCC_HIGH - VCC_LOW));
+}
 
 void setup() {
-  //while(!Serial);
-  //Serial.begin(9600);
+  SPI.begin();
+  radio.begin();
+  radio.setChannel(RF_CHANNEL);
+  radio.setDataRate(RF24_250KBPS);
+  radio.setPALevel(RF24_PA_MAX);
+  radio.setRetries(1, 15);
+  network.begin(RF_NODE);
+  
+  
 
-  LCD.begin(16, 2);
+  pinMode(SELECTOR_PIN, INPUT);
+  mode = digitalRead(SELECTOR_PIN);
 
-  LCD.print(F("Karta: "));
 
-  // see if the card is present and can be initialized:
-  if(!SD.begin(SD_CS_PIN)) {
-    LCD.print(F("BLAD!"));
+  analogReference(INTERNAL); //Use 1v1 AREF which limits us to ~50C readings, fair enough.
 
-    // don't do anything more:
-    while(1);
-  }
+  // SELECTOR_PIN high - use MCP9700A via ADC
+  if(mode) {
+    for(uint8_t i = 0; i < 100; i++) analogRead(MCP_PIN); //First few readings should be discarded - see datasheet
 
-  LCD.print(F("OK"));
-
-  sensors.begin();
-  sensorCount = sensors.getDeviceCount();
-
-  LCD.setCursor(0, 1);
-  LCD.print(F("Sensory: "));
-  LCD.print(sensorCount, DEC);
-
-  delay(1000);
-
-  for(uint16_t i = 0; i < 65535; i++) {
-    fileName = "temp_" + String(i, DEC) + ".csv";
-    if(!SD.exists(fileName)) {
-      LCD.clear();
-      LCD.print(F("Plik:"));
-      LCD.setCursor(0, 1);
-      LCD.print(fileName);
-      break;
+  // SELECTOR_PIN low - use DS18B20 via 1Wire
+  } else {
+    sensors.begin();
+    if(sensors.getDeviceCount() != 1) {
+      while(true);
     }
+
+    sensors.setResolution(DS_SENSOR_RES);
   }
 
-  for(uint8_t i = 0; i < sensorCount; i++) {
-    sensors.getAddress(sensorAddress[i], i);
-    sensors.setResolution(sensorAddress[i], SENSOR_RES);
-  }
-
-  delay(5000);
-  LCD.clear();
-  LCD.print(F("Temperatura"));
 }
 
 void loop() {
-  static uint8_t loopCounter = 0;
-  static uint32_t writeCounter = 0;
-  sensors.requestTemperatures();
+  network.update();
 
-  for(uint8_t i = 0; i < sensorCount; i++) {
-    float temp = sensors.getTempC(sensorAddress[i]);
-    LCD.setCursor(0, 1);
-    LCD.print(i + 1, DEC);
-    LCD.print(F(": "));
+  while(network.available()){
+    RF24NetworkHeader header;
+    float value;
+    network.read(header, &value, sizeof(value));
+    if(header.from_node == 0) {
+      RF24NetworkHeader tx_header(header.from_node, header.type);
+      float tx_value = -1337;
+      switch(header.type - 65){
+        case 0:
+          tx_value = getTemperature();
+          break;
+        case 1:
+          tx_value = getVoltage();
+          break;
+        case 2:
+          tx_value = getCharge();
+          break;
+      }
 
-    LCD.print(temp, 4);
-    LCD.print(F("\xdf" "C"));
-
-    if(sensorRead[i] != 0) {
-      sensorRead[i] = (sensorRead[i] + temp) / 2;
-    } else {
-      sensorRead[i] = temp;
+      if(tx_value != -1337){
+        for(uint8_t i = 0; i < 10; i++){
+          if(network.write(tx_header, &tx_value, sizeof(tx_value))) break;
+        }
+      }
     }
-
-    delay(3000);
   }
-
-  //Save to file every 20 cycles
-  if(++loopCounter == 20) {
-      // Show "write" icon
-      LCD.setCursor(15, 0);
-      LCD.write(0xd0);
-
-      File dataFile = SD.open(fileName, FILE_WRITE);
-      dataFile.print(String(writeCounter, DEC));
-      dataFile.print(";");
-      for(uint8_t i = 0; i < sensorCount; i++) {
-        dataFile.print(String(sensorRead[i], 4));
-        if(i + 1 < sensorCount) dataFile.print(F(";"));
-      }
-      dataFile.print(F("\n"));
-      dataFile.close();
-
-      writeCounter++;
-      loopCounter = 0;
-      for(uint8_t i = 0; i < sensorCount; i++) {
-        sensorRead[i] = 0;
-      }
-
-      // Hide "write" icon
-      LCD.setCursor(15, 0);
-      LCD.write(' ');
-    }
-
+  Watchdog.sleep(1000);
 }
