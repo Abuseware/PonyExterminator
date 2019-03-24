@@ -13,8 +13,6 @@
 #include <OneWire.h>
 #include <DallasTemperature.h>
 
-#include <Adafruit_SleepyDog.h>
-
 #include "config.h"
 #if MCP_SAMPLES > 255 || MCP_SAMPLES < 1
   #error MCP_SAMPLES is out of range (1-255)
@@ -26,7 +24,15 @@ RF24Network network(radio);
 OneWire oneWire(ONEWIRE_PIN);
 DallasTemperature sensors(&oneWire);
 
+enum packetType {PACKET_TEMPERATURE, PACKET_VOLTAGE, PACKET_CHARGE, PACKET_ALL};
+
 uint8_t mode;
+
+struct __attribute__((packed)) packet_t {
+  float temperature;
+  float voltage;
+  float charge;
+};
 
 int compareInt(const void* a, const void* b) {
   return (*(int*)a - *(int*)b);
@@ -81,6 +87,9 @@ int getCharge() {
 }
 
 void setup() {
+  Serial.begin(9600);
+  while(!Serial);
+  
   SPI.begin();
   radio.begin();
   radio.setChannel(RF_CHANNEL);
@@ -88,21 +97,20 @@ void setup() {
   radio.setPALevel(RF24_PA_MAX);
   radio.setRetries(1, 15);
   network.begin(RF_NODE);
-  
-  
 
   pinMode(SELECTOR_PIN, INPUT);
   mode = digitalRead(SELECTOR_PIN);
-
 
   analogReference(INTERNAL); //Use 1v1 AREF which limits us to ~50C readings, fair enough.
 
   // SELECTOR_PIN high - use MCP9700A via ADC
   if(mode) {
+    Serial.println(F("Using MCP9700(A)"));
     for(uint8_t i = 0; i < 100; i++) analogRead(MCP_PIN); //First few readings should be discarded - see datasheet
 
   // SELECTOR_PIN low - use DS18B20 via 1Wire
   } else {
+    Serial.println(F("Using DS18B20"));
     sensors.begin();
     if(sensors.getDeviceCount() != 1) {
       while(true);
@@ -111,36 +119,28 @@ void setup() {
     sensors.setResolution(DS_SENSOR_RES);
   }
 
+  Serial.println(F("Sending hello..."));
+  network.update();
+  RF24NetworkHeader header(0);
+  for(uint8_t i = 0; i < 10; i++){
+    if(network.write(header, nullptr, 0)) break;
+  }
 }
 
 void loop() {
   network.update();
+  RF24NetworkHeader header(0, 65);
+  packet_t packet = {
+    getTemperature(),
+    getVoltage(),
+    getCharge()
+  };
 
-  while(network.available()){
-    RF24NetworkHeader header;
-    float value;
-    network.read(header, &value, sizeof(value));
-    if(header.from_node == 0) {
-      RF24NetworkHeader tx_header(header.from_node, header.type);
-      float tx_value = -1337;
-      switch(header.type - 65){
-        case 0:
-          tx_value = getTemperature();
-          break;
-        case 1:
-          tx_value = getVoltage();
-          break;
-        case 2:
-          tx_value = getCharge();
-          break;
-      }
-
-      if(tx_value != -1337){
-        for(uint8_t i = 0; i < 10; i++){
-          if(network.write(tx_header, &tx_value, sizeof(tx_value))) break;
-        }
-      }
-    }
+  Serial.println("Sending...");
+  radio.powerUp();
+  for(uint8_t i = 0; i < 10; i++){
+    if(network.write(header, &packet, sizeof(packet))) break;
   }
-  Watchdog.sleep(1000);
+  radio.powerDown();
+  delay(60000);
 }
