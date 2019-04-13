@@ -19,6 +19,6 @@
 
 //Power supply watch config
 #define VCC_PIN A2
-#define VCC_LOW 2.7L
-#define VCC_HIGH 4.2L
+#define VCC_LOW 3.0L
+#define VCC_HIGH 4.0L
 #define VCC_SAMPLES 100

@@ -13,6 +13,8 @@
 #include <OneWire.h>
 #include <DallasTemperature.h>
 
+#include <Adafruit_SleepyDog.h>
+
 #include "config.h"
 #if MCP_SAMPLES > 255 || MCP_SAMPLES < 1
   #error MCP_SAMPLES is out of range (1-255)
@@ -128,7 +130,10 @@ void setup() {
 }
 
 void loop() {
+  //Network update
   network.update();
+
+  //Prepare header and packet
   RF24NetworkHeader header(0, 65);
   packet_t packet = {
     getTemperature(),
@@ -136,11 +141,28 @@ void loop() {
     getCharge()
   };
 
+  //Send 
   Serial.println("Sending...");
   radio.powerUp();
   for(uint8_t i = 0; i < 10; i++){
     if(network.write(header, &packet, sizeof(packet))) break;
   }
   radio.powerDown();
-  delay(60000);
+
+  Serial.println("Going to sleep...");
+  Serial.flush();
+  uint32_t counter = 0;
+  while(counter < 300000) {
+    counter += Watchdog.sleep(1000);
+  }
+  Serial.print("Slept for ");
+  Serial.print(counter, DEC);
+  Serial.println("ms");
+  Serial.flush();
+
+  while(getVoltage() < VCC_LOW) {
+    Serial.println("Battery low, going to sleep...");
+    Serial.flush();
+    Watchdog.sleep(60000);
+  }
 }
